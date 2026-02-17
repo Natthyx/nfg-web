@@ -6,27 +6,27 @@ import { cn } from "@/lib/utils";
 import { useUser } from "@/hooks/use-user";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
-  LayoutDashboard,
-  Package,
+  Home,
   Users2,
-  Truck,
-  Container,
-  Receipt,
+  Activity,
+  Calendar,
+  Package,
   FileText,
+  Truck,
   BarChart3,
-  UserCog,
+  Settings,
 } from "lucide-react";
 
 const navItems = [
-  { title: "Dashboard",  href: "/dashboard",  icon: LayoutDashboard, roles: ["admin", "dispatcher"] },
-  { title: "Loads",      href: "/loads",       icon: Package,         roles: ["admin", "dispatcher"] },
-  { title: "Drivers",    href: "/drivers",     icon: Users2,          roles: ["admin", "dispatcher"] },
-  { title: "Trucks",     href: "/trucks",      icon: Truck,           roles: ["admin", "dispatcher"] },
-  { title: "Trailers",   href: "/trailers",    icon: Container,       roles: ["admin", "dispatcher"] },
-  { title: "Receipts",   href: "/receipts",    icon: Receipt,         roles: ["admin", "dispatcher"] },
-  { title: "Documents",  href: "/documents",   icon: FileText,        roles: ["admin", "dispatcher"] },
-  { title: "Reports",    href: "/reports",     icon: BarChart3,       roles: ["admin"] },
-  { title: "Users",      href: "/users",       icon: UserCog,         roles: ["admin"] },
+  { title: "Dashboard",       href: "/dashboard",       icon: Home,     roles: ["admin", "dispatcher"] },
+  { title: "Drivers",         href: "/drivers",         icon: Users2,   roles: ["admin", "dispatcher"] },
+  { title: "Status Updates",  href: "/status-updates",  icon: Activity, roles: ["admin", "dispatcher"] },
+  { title: "Driver Schedule", href: "/driver-schedule", icon: Calendar, roles: ["admin", "dispatcher"] },
+  { title: "Loads",           href: "/loads",           icon: Package,  roles: ["admin", "dispatcher"] },
+  { title: "Receipts",        href: "/receipts",        icon: FileText,  roles: ["admin", "dispatcher"] },
+  { title: "Trucks & Trailers", href: "/trucks",      icon: Truck,    roles: ["admin", "dispatcher"] },
+  { title: "Analytics",       href: "/analytics",       icon: BarChart3, roles: ["admin", "dispatcher"] },
+  { title: "Settings",        href: "/settings",        icon: Settings, roles: ["admin", "dispatcher"] },
 ];
 
 export function Sidebar() {
@@ -39,13 +39,16 @@ export function Sidebar() {
 
   return (
     <div className="flex h-full w-64 flex-col border-r bg-card">
-      {/* Logo */}
-      <div className="flex h-16 items-center border-b px-6">
-        <Link href="/dashboard" className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
-            <Truck className="h-4 w-4 text-primary-foreground" />
-          </div>
-          <span className="text-xl font-bold">NFG</span>
+      {/* Logo - NFG Logistics (add logo.png to nfg-web/public/) */}
+      <div className="flex h-16 shrink-0 items-center px-4">
+        <Link href="/dashboard" className="flex h-full items-center">
+          <img
+            src="/logo.png"
+            alt="NFG Logistics"
+            className="max-h-full max-w-full object-contain"
+            width={160}
+            height={40}
+          />
         </Link>
       </div>
 

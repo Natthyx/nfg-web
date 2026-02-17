@@ -44,7 +44,7 @@ export default function ReceiptsPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Receipts & PODs" description={`${receipts.length} receipts uploaded`} />
+      <PageHeader title="Receipts" description={`${receipts.length} receipts uploaded`} />
 
       <div className="relative max-w-sm">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
