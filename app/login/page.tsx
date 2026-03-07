@@ -20,16 +20,33 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  // Load remembered email on mount
+  // On mount:
+  // - If a Supabase session already exists → redirect to dashboard
+  // - Load remembered email (if any)
   useEffect(() => {
-    if (typeof window !== "undefined") {
+    if (typeof window === "undefined") return;
+
+    const supabase = createClient();
+
+    const init = async () => {
+      // Use getSession() which handles token refresh automatically.
+      // getUser() would fail if the access token is expired and the
+      // refresh hasn't kicked in yet, causing a needless re-login.
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        router.replace("/dashboard");
+        return;
+      }
+
       const remembered = localStorage.getItem(REMEMBER_EMAIL_KEY);
       if (remembered) {
         setEmail(remembered);
         setRememberMe(true);
       }
-    }
-  }, []);
+    };
+
+    void init();
+  }, [router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -40,9 +57,6 @@ export default function LoginPage() {
     const { error: authError } = await supabase.auth.signInWithPassword({
       email,
       password,
-      options: {
-        persistSession: true, // Enable persistent session
-      },
     });
 
     if (authError) {

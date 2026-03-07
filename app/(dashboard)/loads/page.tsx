@@ -41,7 +41,6 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import { STATUS_CONFIG, PAYMENT_CONFIG } from "@/lib/constants";
 import {
@@ -65,11 +64,8 @@ import {
 import { toast } from "sonner";
 import type {
   Load,
-  User as UserType,
   LoadStatus,
   Stop,
-  Truck as TruckType,
-  Trailer,
   Receipt,
   StatusUpdate,
 } from "@/types";
@@ -137,14 +133,10 @@ export default function LoadsPage() {
   const { user } = useUser();
 
   const [loads, setLoads] = useState<LoadRow[]>([]);
-  const [drivers, setDrivers] = useState<UserType[]>([]);
-  const [trucks, setTrucks] = useState<TruckType[]>([]);
-  const [trailers, setTrailers] = useState<Trailer[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [activeFilter, setActiveFilter] = useState<string>("all");
   const [tab, setTab] = useState("active");
-  const [createOpen, setCreateOpen] = useState(false);
   const [detailLoad, setDetailLoad] = useState<LoadRow | null>(null);
   const [cancelLoad, setCancelLoad] = useState<LoadRow | null>(null);
   const [cancelReason, setCancelReason] = useState("");
@@ -225,23 +217,7 @@ export default function LoadsPage() {
 
   useEffect(() => {
     fetchLoads();
-    supabase
-      .from("users")
-      .select("*")
-      .eq("role", "driver")
-      .eq("is_active", true)
-      .then(({ data }) => setDrivers(data || []));
-    supabase
-      .from("trucks")
-      .select("*")
-      .eq("is_active", true)
-      .then(({ data }) => setTrucks(data || []));
-    supabase
-      .from("trailers")
-      .select("*")
-      .eq("is_active", true)
-      .then(({ data }) => setTrailers(data || []));
-  }, [fetchLoads, supabase]);
+  }, [fetchLoads]);
 
   // ── Real-time subscription ──────────────────────────────────────────
   useEffect(() => {
@@ -302,61 +278,6 @@ export default function LoadsPage() {
       ),
     [tabLoads, search]
   );
-
-  // ── Create load handler ─────────────────────────────────────────────
-  const handleCreate = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    setSubmitting(true);
-    const fd = new FormData(e.currentTarget);
-
-    const { data: load, error } = await supabase
-      .from("loads")
-      .insert({
-        company_id: user?.company_id,
-        dispatcher_id: user?.id,
-        driver_id: fd.get("driver_id") || null,
-        truck_id: fd.get("truck_id") || null,
-        trailer_id: fd.get("trailer_id") || null,
-        rate: Number(fd.get("rate")) || 0,
-        equipment_type: fd.get("equipment_type"),
-        special_instructions: fd.get("special_instructions"),
-      })
-      .select()
-      .single();
-
-    if (error) {
-      toast.error(error.message);
-      setSubmitting(false);
-      return;
-    }
-
-    const pickupStop = {
-      load_id: load.id,
-      type: "pickup" as const,
-      stop_order: 1,
-      facility_name: fd.get("pickup_facility") as string,
-      address: fd.get("pickup_address") as string,
-      city: fd.get("pickup_city") as string,
-      state: fd.get("pickup_state") as string,
-      zip: fd.get("pickup_zip") as string,
-    };
-    const deliveryStop = {
-      load_id: load.id,
-      type: "delivery" as const,
-      stop_order: 2,
-      facility_name: fd.get("delivery_facility") as string,
-      address: fd.get("delivery_address") as string,
-      city: fd.get("delivery_city") as string,
-      state: fd.get("delivery_state") as string,
-      zip: fd.get("delivery_zip") as string,
-    };
-
-    await supabase.from("stops").insert([pickupStop, deliveryStop]);
-    toast.success(`Load ${load.reference_number} created`);
-    setCreateOpen(false);
-    setSubmitting(false);
-    fetchLoads();
-  };
 
   // ── CSV Export handler ──────────────────────────────────────────────
   const handleExportCSV = async () => {
@@ -493,142 +414,16 @@ export default function LoadsPage() {
     <div className="space-y-6">
       {/* ── Header ─────────────────────────────────────────────────────── */}
       <PageHeader title="Loads" description="Manage all loads and shipments">
-        <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-          <DialogTrigger asChild>
-            <Button asChild>
-              <Link href="/loads/dispatch">
-                <Plus className="mr-2 h-4 w-4" /> Dispatch Driver
-              </Link>
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>Create New Load</DialogTitle>
-              <DialogDescription>
-                Enter load details with pickup and delivery stops.
-              </DialogDescription>
-            </DialogHeader>
-            <form onSubmit={handleCreate} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Driver</Label>
-                  <select
-                    name="driver_id"
-                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                  >
-                    <option value="">Unassigned</option>
-                    {drivers.map((d) => (
-                      <option key={d.id} value={d.id}>
-                        {d.full_name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="space-y-2">
-                  <Label>Rate ($)</Label>
-                  <Input name="rate" type="number" min="0" step="0.01" required />
-                </div>
-                <div className="space-y-2">
-                  <Label>Equipment</Label>
-                  <Input name="equipment_type" placeholder="Dry Van, Reefer..." />
-                </div>
-                <div className="space-y-2">
-                  <Label>Truck</Label>
-                  <select
-                    name="truck_id"
-                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                  >
-                    <option value="">None</option>
-                    {trucks.map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.truck_number}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="space-y-2">
-                  <Label>Trailer</Label>
-                  <select
-                    name="trailer_id"
-                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                  >
-                    <option value="">None</option>
-                    {trailers.map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.trailer_number}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label>Special Instructions</Label>
-                <Textarea name="special_instructions" />
-              </div>
-
-              <div className="border-t pt-4">
-                <h4 className="font-semibold mb-3">Pickup Stop</h4>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="col-span-2 space-y-2">
-                    <Label>Facility</Label>
-                    <Input name="pickup_facility" required />
-                  </div>
-                  <div className="col-span-2 space-y-2">
-                    <Label>Address</Label>
-                    <Input name="pickup_address" required />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>City</Label>
-                    <Input name="pickup_city" required />
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-2">
-                      <Label>State</Label>
-                      <Input name="pickup_state" required maxLength={2} />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>ZIP</Label>
-                      <Input name="pickup_zip" required />
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div className="border-t pt-4">
-                <h4 className="font-semibold mb-3">Delivery Stop</h4>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="col-span-2 space-y-2">
-                    <Label>Facility</Label>
-                    <Input name="delivery_facility" required />
-                  </div>
-                  <div className="col-span-2 space-y-2">
-                    <Label>Address</Label>
-                    <Input name="delivery_address" required />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>City</Label>
-                    <Input name="delivery_city" required />
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-2">
-                      <Label>State</Label>
-                      <Input name="delivery_state" required maxLength={2} />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>ZIP</Label>
-                      <Input name="delivery_zip" required />
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <DialogFooter>
-                <Button type="submit" disabled={submitting}>
-                  {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  Create Load
-                </Button>
-              </DialogFooter>
-            </form>
-          </DialogContent>
-        </Dialog>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={handleExportCSV}>
+            <FileText className="mr-2 h-4 w-4" /> Export CSV
+          </Button>
+          <Button asChild>
+            <Link href="/loads/dispatch">
+              <Plus className="mr-2 h-4 w-4" /> Dispatch Driver
+            </Link>
+          </Button>
+        </div>
       </PageHeader>
 
       {/* ── Tabs: Active / Completed / Cancelled ───────────────────────── */}

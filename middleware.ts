@@ -25,10 +25,9 @@ export async function middleware(request: NextRequest) {
     }
   );
 
-  // PART 3: Only check session existence using supabase.auth.getUser()
-  // DO NOT fetch profile in middleware
-  // DO NOT invalidate session if profile missing
-  // Only redirect to /login if getUser() returns null
+  // IMPORTANT: Do NOT add any code between createServerClient and
+  // supabase.auth.getUser(). This call refreshes the session if the
+  // access-token has expired, and writes updated cookies via setAll.
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -37,25 +36,38 @@ export async function middleware(request: NextRequest) {
   const isLoginPage = path === "/login";
   const isApiRoute = path.startsWith("/api/");
 
-  // Allow API routes through (auth callbacks, signout, etc.)
+  // Allow API routes through
   if (isApiRoute) return supabaseResponse;
+
+  // --- helper: build a redirect that KEEPS the refreshed auth cookies ------
+  function redirectWithCookies(destination: string) {
+    const url = request.nextUrl.clone();
+    url.pathname = destination;
+    const redirectResponse = NextResponse.redirect(url);
+
+    // Copy every cookie that the Supabase SDK just set on the
+    // supabaseResponse so the browser receives the refreshed tokens.
+    supabaseResponse.cookies.getAll().forEach((cookie) => {
+      redirectResponse.cookies.set(cookie.name, cookie.value, {
+        path: "/",
+        httpOnly: false,
+        sameSite: "lax",
+        secure: process.env.NODE_ENV === "production",
+      });
+    });
+
+    return redirectResponse;
+  }
 
   // Redirect unauthenticated users to login
   if (!user && !isLoginPage) {
-    const url = request.nextUrl.clone();
-    url.pathname = "/login";
-    return NextResponse.redirect(url);
+    return redirectWithCookies("/login");
   }
 
   // Redirect authenticated users away from login
   if (user && isLoginPage) {
-    const url = request.nextUrl.clone();
-    url.pathname = "/dashboard";
-    return NextResponse.redirect(url);
+    return redirectWithCookies("/dashboard");
   }
-
-  // Role-based route protection moved to layout/server components
-  // Middleware only checks session existence, not roles
 
   return supabaseResponse;
 }
