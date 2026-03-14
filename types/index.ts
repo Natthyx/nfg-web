@@ -173,7 +173,7 @@ export interface Receipt {
   file_type?: string;
   signed_by?: string; // Optional - for backward compatibility
   no_pod_available?: boolean; // Optional - for backward compatibility
-  receipt_type?: "fuel" | "road_service" | "toll" | "lumper" | "other";
+  receipt_type?: "fuel" | "road_service" | "toll" | "lumper" | "other" | "pod";
   truck_id?: string;
   amount?: number; // Cost/amount of the receipt
   notes?: string;

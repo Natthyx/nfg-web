@@ -14,7 +14,7 @@ import { format } from "date-fns";
 import type { Receipt, User } from "@/types";
 
 interface ReceiptWithLoad extends Receipt {
-  load?: { reference_number: string; status: string };
+  load?: { reference_number: string; status: string; driver_id?: string };
   uploader?: { full_name: string };
   driver?: { full_name: string };
   truck?: { truck_number: string };
@@ -32,7 +32,7 @@ const RECEIPT_TYPE_LABELS: Record<string, string> = {
 export default function ReceiptsPage() {
   const supabase = createClient();
   const [receipts, setReceipts] = useState<ReceiptWithLoad[]>([]);
-  const [drivers, setDrivers] = useState<User[]>([]);
+  const [drivers, setDrivers] = useState<Pick<User, "id" | "full_name">[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [driverFilter, setDriverFilter] = useState<string>("all");

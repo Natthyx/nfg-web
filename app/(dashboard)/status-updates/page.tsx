@@ -28,7 +28,6 @@ import { ReviewModal } from "@/components/review-modal";
 import type {
   Load,
   LoadStatus,
-  LoadWithDetails,
   Stop,
   User,
   Receipt,
@@ -50,6 +49,7 @@ import { toast } from "sonner";
 // Active (non-terminal) statuses for the main table
 // ---------------------------------------------------------------------------
 const ACTIVE_STATUSES: LoadStatus[] = [
+  "pending_acceptance",
   "dispatched",
   "on_site_shipper",
   "loaded",
@@ -238,8 +238,8 @@ export default function StatusUpdatesPage() {
     return (
       <div className="space-y-6">
         <PageHeader title="Status Updates" description="Live load progression monitoring" />
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-          {Array.from({ length: 5 }).map((_, i) => (
+        <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
+          {Array.from({ length: 6 }).map((_, i) => (
             <Skeleton key={i} className="h-24 rounded-lg" />
           ))}
         </div>
@@ -264,7 +264,7 @@ export default function StatusUpdatesPage() {
       </PageHeader>
 
       {/* ── Summary cards ──────────────────────────────────────────────── */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
         {ACTIVE_STATUSES.map((status) => {
           const config = STATUS_CONFIG[status];
           return (

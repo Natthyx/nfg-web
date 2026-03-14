@@ -117,12 +117,14 @@ function shortDate(d: string | null | undefined) {
 }
 
 const STATUS_DOT_COLORS: Record<string, string> = {
+  pending_acceptance: "bg-orange-400",
   dispatched: "bg-blue-500",
   on_site_shipper: "bg-amber-500",
   loaded: "bg-indigo-500",
   on_site_receiver: "bg-amber-500",
   empty: "bg-slate-500",
   delivered: "bg-emerald-500",
+  declined: "bg-red-400",
   cancelled: "bg-red-500",
 };
 
