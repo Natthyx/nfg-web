@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useUser } from "@/hooks/use-user";
 import { PageHeader } from "@/components/page-header";
@@ -35,6 +35,8 @@ import type {
 } from "@/types";
 import {
   Activity,
+  Bell,
+  BellOff,
   Clock,
   Eye,
   RefreshCw,
@@ -85,11 +87,11 @@ function formatLocation(stop: Stop | null | undefined) {
 
 function formatDate(dateStr: string | undefined | null) {
   if (!dateStr) return "—";
-  return new Date(dateStr).toLocaleString("en-US", {
-    month: "short",
+  return new Date(dateStr).toLocaleDateString("en-US", {
+    weekday: "long",
+    month: "long",
     day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
+    year: "numeric",
   });
 }
 
@@ -115,13 +117,90 @@ export default function StatusUpdatesPage() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<string>("all");
   const [reviewLoad, setReviewLoad] = useState<LoadRow | null>(null);
-  const [refreshKey, setRefreshKey] = useState(0);
+  const [notificationsEnabled, setNotificationsEnabled] = useState(false);
+  const [isLive, setIsLive] = useState(false);
 
   const isAdmin = user?.role === "admin";
+  const prevLoadsRef = useRef<Map<string, string>>(new Map());
+  const initialLoadDone = useRef(false);
+
+  // ── Browser notification permission ───────────────────────────────
+  useEffect(() => {
+    if (typeof window === "undefined" || !("Notification" in window)) return;
+    if (Notification.permission === "granted") {
+      setNotificationsEnabled(true);
+    }
+  }, []);
+
+  const requestNotifications = useCallback(async () => {
+    if (typeof window === "undefined" || !("Notification" in window)) {
+      toast.error("Browser notifications are not supported");
+      return;
+    }
+    const perm = await Notification.requestPermission();
+    setNotificationsEnabled(perm === "granted");
+    if (perm === "granted") {
+      toast.success("Desktop notifications enabled");
+    } else {
+      toast.error("Notification permission denied");
+    }
+  }, []);
+
+  const sendBrowserNotification = useCallback(
+    (title: string, body: string) => {
+      if (typeof window === "undefined" || !("Notification" in window)) return;
+      if (Notification.permission !== "granted") return;
+      try {
+        new Notification(title, {
+          body,
+          icon: "/logo.png",
+        });
+      } catch {
+        // Silently fail
+      }
+    },
+    []
+  );
+
+  // ── Notify on detected changes ────────────────────────────────────
+  const notifyChanges = useCallback(
+    (newLoads: LoadRow[]) => {
+      if (!initialLoadDone.current) return;
+
+      const prev = prevLoadsRef.current;
+
+      for (const load of newLoads) {
+        const prevStatus = prev.get(load.id);
+        if (prevStatus && prevStatus !== load.status) {
+          const oldCfg = STATUS_CONFIG[prevStatus as LoadStatus];
+          const newCfg = STATUS_CONFIG[load.status as LoadStatus];
+          const driverName = load.driver?.full_name || "Driver";
+          const ref = load.reference_number || "Load";
+          const title = `${driverName} — ${ref}`;
+          const body = `${oldCfg?.label ?? prevStatus} → ${newCfg?.label ?? load.status}`;
+
+          toast.info(title, { description: body, duration: 8000 });
+          sendBrowserNotification(title, body);
+        }
+
+        if (!prev.has(load.id)) {
+          const driverName = load.driver?.full_name || "Driver";
+          const ref = load.reference_number || "Load";
+          const cfg = STATUS_CONFIG[load.status as LoadStatus];
+          const title = `New Load — ${ref}`;
+          const body = `${driverName} · ${cfg?.label ?? load.status}`;
+
+          toast.info(title, { description: body, duration: 8000 });
+          sendBrowserNotification(title, body);
+        }
+      }
+    },
+    [sendBrowserNotification]
+  );
 
   // ── Fetch active loads ──────────────────────────────────────────────
-  const fetchLoads = useCallback(async () => {
-    setLoading(true);
+  const fetchLoads = useCallback(async (isInitial = false) => {
+    if (isInitial) setLoading(true);
     try {
       const { data, error } = await supabase
         .from("loads")
@@ -140,70 +219,89 @@ export default function StatusUpdatesPage() {
 
       if (error) {
         console.error("Failed to fetch loads:", error);
-        toast.error("Failed to load status updates: " + error.message);
-        // Fallback: simple query
+        if (isInitial) toast.error("Failed to load status updates: " + error.message);
         const { data: simple } = await supabase
           .from("loads")
           .select("*")
           .in("status", ACTIVE_STATUSES)
           .order("updated_at", { ascending: false });
-        setLoads(
-          ((simple as unknown as LoadRow[]) ?? []).map((l) => ({
-            ...l,
-            driver: null,
-            dispatcher: null,
-            stops: [],
-            receipts: [],
-            status_updates: [],
-          }))
-        );
+        const mapped = ((simple as unknown as LoadRow[]) ?? []).map((l) => ({
+          ...l,
+          driver: null,
+          dispatcher: null,
+          stops: [],
+          receipts: [],
+          status_updates: [],
+        }));
+        notifyChanges(mapped);
+        setLoads(mapped);
       } else {
-        setLoads((data as LoadRow[]) ?? []);
+        const newLoads = (data as LoadRow[]) ?? [];
+        notifyChanges(newLoads);
+        setLoads(newLoads);
       }
     } catch (err) {
       console.error("Status updates fetch exception:", err);
-      toast.error("Connection error loading status updates");
+      if (isInitial) toast.error("Connection error loading status updates");
     } finally {
-      setLoading(false);
+      if (isInitial) setLoading(false);
     }
-  }, [supabase]);
+  }, [supabase, notifyChanges]);
 
+  // ── Update prevLoadsRef whenever loads change ─────────────────────
   useEffect(() => {
-    fetchLoads();
-  }, [fetchLoads, refreshKey]);
+    const map = new Map<string, string>();
+    for (const load of loads) {
+      map.set(load.id, load.status);
+    }
+    prevLoadsRef.current = map;
+    if (loads.length > 0 || !loading) {
+      initialLoadDone.current = true;
+    }
+  }, [loads, loading]);
 
-  // ── Real-time subscription ──────────────────────────────────────────
+  // ── Initial fetch ─────────────────────────────────────────────────
+  useEffect(() => {
+    fetchLoads(true);
+  }, [fetchLoads]);
+
+  // ── Polling: check for changes every 5 seconds ────────────────────
+  useEffect(() => {
+    const interval = setInterval(() => {
+      fetchLoads(false);
+    }, 5000);
+    setIsLive(true);
+    return () => {
+      clearInterval(interval);
+      setIsLive(false);
+    };
+  }, [fetchLoads]);
+
+  // ── Realtime subscription (bonus — works if enabled in Supabase) ──
   useEffect(() => {
     const channel = supabase
-      .channel("loads-realtime")
+      .channel("status-updates-realtime")
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "loads" },
-        () => {
-          // Refetch everything on any load change
-          setRefreshKey((k) => k + 1);
-        }
+        () => fetchLoads(false)
       )
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "status_updates" },
-        () => {
-          setRefreshKey((k) => k + 1);
-        }
+        () => fetchLoads(false)
       )
       .on(
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "receipts" },
-        () => {
-          setRefreshKey((k) => k + 1);
-        }
+        () => fetchLoads(false)
       )
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [supabase]);
+  }, [supabase, fetchLoads]);
 
   // ── Filtered loads ──────────────────────────────────────────────────
   const filteredLoads = useMemo(() => {
@@ -230,8 +328,8 @@ export default function StatusUpdatesPage() {
   // ── Callback after review action completes ──────────────────────────
   const handleReviewDone = useCallback(() => {
     setReviewLoad(null);
-    setRefreshKey((k) => k + 1);
-  }, []);
+    fetchLoads(false);
+  }, [fetchLoads]);
 
   // ── Loading skeleton ────────────────────────────────────────────────
   if (loading && loads.length === 0) {
@@ -252,15 +350,47 @@ export default function StatusUpdatesPage() {
     <div className="space-y-6">
       {/* ── Header ─────────────────────────────────────────────────────── */}
       <PageHeader title="Status Updates" description="Monitor live load progression and review completed loads">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setRefreshKey((k) => k + 1)}
-          className="gap-2"
-        >
-          <RefreshCw className="h-4 w-4" />
-          Refresh
-        </Button>
+        <div className="flex items-center gap-2">
+          {/* Live indicator */}
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-medium">
+            <span
+              className={`h-2 w-2 rounded-full ${
+                isLive ? "bg-emerald-500 animate-pulse" : "bg-gray-400"
+              }`}
+            />
+            {isLive ? "Live" : "Connecting..."}
+          </div>
+
+          {/* Desktop notifications toggle */}
+          <Button
+            variant={notificationsEnabled ? "outline" : "default"}
+            size="sm"
+            onClick={requestNotifications}
+            className="gap-2"
+            title={
+              notificationsEnabled
+                ? "Desktop notifications enabled"
+                : "Enable desktop notifications"
+            }
+          >
+            {notificationsEnabled ? (
+              <Bell className="h-4 w-4" />
+            ) : (
+              <BellOff className="h-4 w-4" />
+            )}
+            {notificationsEnabled ? "Notifications On" : "Enable Notifications"}
+          </Button>
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => fetchLoads(false)}
+            className="gap-2"
+          >
+            <RefreshCw className="h-4 w-4" />
+            Refresh
+          </Button>
+        </div>
       </PageHeader>
 
       {/* ── Summary cards ──────────────────────────────────────────────── */}

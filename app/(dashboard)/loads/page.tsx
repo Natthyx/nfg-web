@@ -116,6 +116,31 @@ function shortDate(d: string | null | undefined) {
   });
 }
 
+function getPickupStop(stops: Stop[]) {
+  const sorted = [...stops].sort((a, b) => (a.stop_order ?? 0) - (b.stop_order ?? 0));
+  return sorted.find((s) => s.type === "pickup") ?? null;
+}
+
+function getDeliveryStop(stops: Stop[]) {
+  const sorted = [...stops].sort((a, b) => (b.stop_order ?? 0) - (a.stop_order ?? 0));
+  return sorted.find((s) => s.type === "delivery") ?? null;
+}
+
+function fmtCityState(stop: Stop | null) {
+  if (!stop) return "—";
+  return [stop.city, stop.state].filter(Boolean).join(", ");
+}
+
+function fmtStopDate(d: string | null | undefined) {
+  if (!d) return "—";
+  return new Date(d).toLocaleDateString("en-US", {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
 const STATUS_DOT_COLORS: Record<string, string> = {
   pending_acceptance: "bg-orange-400",
   dispatched: "bg-blue-500",
@@ -650,16 +675,14 @@ function LoadsTable({
         <Table>
           <TableHeader>
             <TableRow className="bg-muted/30">
-              <TableHead className="font-semibold">Reference</TableHead>
-              <TableHead className="font-semibold">Driver</TableHead>
               <TableHead className="font-semibold">Status</TableHead>
-              <TableHead className="font-semibold">Payment</TableHead>
-              {tab === "completed" && (
-                <TableHead className="font-semibold hidden lg:table-cell">Completed</TableHead>
-              )}
-              {tab === "cancelled" && (
-                <TableHead className="font-semibold hidden lg:table-cell">Cancel Reason</TableHead>
-              )}
+              <TableHead className="font-semibold">Pickup Date</TableHead>
+              <TableHead className="font-semibold">Delivery Date</TableHead>
+              <TableHead className="font-semibold">Company Name</TableHead>
+              <TableHead className="font-semibold">Load Number</TableHead>
+              <TableHead className="font-semibold">Pickup City, State</TableHead>
+              <TableHead className="font-semibold">Delivery City, State</TableHead>
+              <TableHead className="font-semibold">Driver</TableHead>
               <TableHead className="font-semibold text-right">Rate</TableHead>
               <TableHead className="font-semibold text-right">Actions</TableHead>
             </TableRow>
@@ -667,35 +690,33 @@ function LoadsTable({
           <TableBody>
             {loads.map((load) => {
               const sCfg = STATUS_CONFIG[load.status as LoadStatus];
-              const pCfg = PAYMENT_CONFIG[load.payment_status];
+              const pickup = getPickupStop(load.stops ?? []);
+              const delivery = getDeliveryStop(load.stops ?? []);
 
               return (
                 <TableRow key={load.id}>
-                  <TableCell className="font-medium">
-                    <div className="flex items-center gap-2">
-                      <Truck className="h-4 w-4 text-muted-foreground" />
-                      {load.reference_number}
-                    </div>
-                  </TableCell>
-                  <TableCell>{load.driver?.full_name || "—"}</TableCell>
                   <TableCell>
                     <Badge variant={sCfg?.variant}>{sCfg?.label}</Badge>
                   </TableCell>
-                  <TableCell>
-                    <PaymentStatusDropdown load={load} onUpdate={onUpdate} />
+                  <TableCell className="text-sm whitespace-nowrap">
+                    {fmtStopDate(pickup?.appointment_date)}
                   </TableCell>
-                  {tab === "completed" && (
-                    <TableCell className="hidden lg:table-cell text-sm text-muted-foreground">
-                      {fmtDate(load.completed_at)}
-                    </TableCell>
-                  )}
-                  {tab === "cancelled" && (
-                    <TableCell className="hidden lg:table-cell">
-                      <p className="text-sm text-muted-foreground truncate max-w-[200px]">
-                        {load.cancel_reason || "—"}
-                      </p>
-                    </TableCell>
-                  )}
+                  <TableCell className="text-sm whitespace-nowrap">
+                    {fmtStopDate(delivery?.appointment_date)}
+                  </TableCell>
+                  <TableCell className="font-medium">
+                    {load.client_name || "—"}
+                  </TableCell>
+                  <TableCell className="font-medium">
+                    {load.reference_number}
+                  </TableCell>
+                  <TableCell className="text-sm whitespace-nowrap">
+                    {fmtCityState(pickup)}
+                  </TableCell>
+                  <TableCell className="text-sm whitespace-nowrap">
+                    {fmtCityState(delivery)}
+                  </TableCell>
+                  <TableCell>{load.driver?.full_name || "—"}</TableCell>
                   <TableCell className="text-right font-medium">
                     ${Number(load.rate).toLocaleString()}
                   </TableCell>
