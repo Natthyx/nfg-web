@@ -1,18 +1,39 @@
 import { createServerClient } from "@supabase/ssr";
+import type { User } from "@supabase/supabase-js";
 import { NextResponse, type NextRequest } from "next/server";
 
+function missingEnvResponse() {
+  return new NextResponse(
+    `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"/><title>Configuration required</title></head>
+<body style="font-family:system-ui,sans-serif;max-width:42rem;margin:3rem auto;padding:0 1rem;line-height:1.5">
+<h1 style="font-size:1.25rem">Supabase environment variables are missing</h1>
+<p>Add <code>NEXT_PUBLIC_SUPABASE_URL</code> and <code>NEXT_PUBLIC_SUPABASE_ANON_KEY</code> in the Vercel project
+<strong>Settings → Environment Variables</strong> for Production (and Preview if needed), then redeploy.</p>
+</body></html>`,
+    {
+      status: 503,
+      headers: { "content-type": "text/html; charset=utf-8" },
+    }
+  );
+}
+
 export async function middleware(request: NextRequest) {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  if (!supabaseUrl?.trim() || !supabaseAnonKey?.trim()) {
+    return missingEnvResponse();
+  }
+
   let supabaseResponse = NextResponse.next({ request });
 
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return request.cookies.getAll();
-        },
-        setAll(cookiesToSet) {
+  const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
+    cookies: {
+      getAll() {
+        return request.cookies.getAll();
+      },
+      setAll(cookiesToSet) {
+        try {
           cookiesToSet.forEach(({ name, value }) =>
             request.cookies.set(name, value)
           );
@@ -20,51 +41,46 @@ export async function middleware(request: NextRequest) {
           cookiesToSet.forEach(({ name, value, options }) =>
             supabaseResponse.cookies.set(name, value, options)
           );
-        },
+        } catch (e) {
+          console.error("[middleware] Supabase cookie setAll failed:", e);
+        }
       },
-    }
-  );
+    },
+  });
 
-  // IMPORTANT: Do NOT add any code between createServerClient and
-  // supabase.auth.getUser(). This call refreshes the session if the
-  // access-token has expired, and writes updated cookies via setAll.
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  let user: User | null = null;
+  try {
+    const {
+      data: { user: u },
+    } = await supabase.auth.getUser();
+    user = u;
+  } catch (e) {
+    console.error("[middleware] supabase.auth.getUser failed:", e);
+  }
 
   const path = request.nextUrl.pathname;
   const isLoginPage = path === "/login";
   const isApiRoute = path.startsWith("/api/");
 
-  // Allow API routes through
   if (isApiRoute) return supabaseResponse;
 
-  // --- helper: build a redirect that KEEPS the refreshed auth cookies ------
   function redirectWithCookies(destination: string) {
     const url = request.nextUrl.clone();
     url.pathname = destination;
     const redirectResponse = NextResponse.redirect(url);
 
-    // Copy every cookie that the Supabase SDK just set on the
-    // supabaseResponse so the browser receives the refreshed tokens.
     supabaseResponse.cookies.getAll().forEach((cookie) => {
-      redirectResponse.cookies.set(cookie.name, cookie.value, {
-        path: "/",
-        httpOnly: false,
-        sameSite: "lax",
-        secure: process.env.NODE_ENV === "production",
-      });
+      const { name, value, ...opts } = cookie;
+      redirectResponse.cookies.set(name, value, opts);
     });
 
     return redirectResponse;
   }
 
-  // Redirect unauthenticated users to login
   if (!user && !isLoginPage) {
     return redirectWithCookies("/login");
   }
 
-  // Redirect authenticated users away from login
   if (user && isLoginPage) {
     return redirectWithCookies("/dashboard");
   }

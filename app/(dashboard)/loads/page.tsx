@@ -1138,12 +1138,21 @@ function LoadDetailDialog({
                                   <ArrowRight className="h-3 w-3 text-muted-foreground" />
                                 </>
                               )}
-                              <Badge
-                                variant={newCfg.variant}
-                                className="text-[10px] px-1.5 py-0"
-                              >
-                                {newCfg.label}
-                              </Badge>
+                              {newCfg ? (
+                                <Badge
+                                  variant={newCfg.variant}
+                                  className="text-[10px] px-1.5 py-0"
+                                >
+                                  {newCfg.label}
+                                </Badge>
+                              ) : (
+                                <Badge
+                                  variant="secondary"
+                                  className="text-[10px] px-1.5 py-0"
+                                >
+                                  {u.new_status ?? "Unknown"}
+                                </Badge>
+                              )}
                             </div>
                             {u.notes && (
                               <p className="text-xs text-muted-foreground mt-1 italic">

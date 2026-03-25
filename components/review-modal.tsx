@@ -444,9 +444,15 @@ export function ReviewModal({ load, open, onClose, onDone }: ReviewModalProps) {
                                 <ArrowRight className="h-3 w-3 text-muted-foreground" />
                               </>
                             )}
-                            <Badge variant={newConfig.variant} className="text-[10px] px-1.5 py-0">
-                              {newConfig.label}
-                            </Badge>
+                            {newConfig ? (
+                              <Badge variant={newConfig.variant} className="text-[10px] px-1.5 py-0">
+                                {newConfig.label}
+                              </Badge>
+                            ) : (
+                              <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                                {u.new_status ?? "Unknown"}
+                              </Badge>
+                            )}
                           </div>
                           {u.notes && (
                             <p className="text-xs text-muted-foreground mt-1 italic">{u.notes}</p>
