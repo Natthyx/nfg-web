@@ -21,14 +21,25 @@ export function getSupabaseAnonKey(): string {
  * runtimes/custom domains (local vs Vercel).
  */
 export function getSupabaseCookieOptions() {
-  const cookieDomain =
-    process.env.NEXT_PUBLIC_AUTH_COOKIE_DOMAIN?.trim() ||
-    process.env.AUTH_COOKIE_DOMAIN?.trim() ||
-    undefined;
+  // Use exact domain for production, localhost for development
+  const isProduction = process.env.NODE_ENV === "production";
+  const isLocalhost = process.env.NODE_ENV === "development";
+  
+  let cookieDomain: string | undefined;
+  
+  if (isProduction) {
+    // For custom domain nfg-admin.company, use the exact domain
+    cookieDomain = process.env.NEXT_PUBLIC_AUTH_COOKIE_DOMAIN?.trim() || 
+                   process.env.AUTH_COOKIE_DOMAIN?.trim() ||
+                   "nfg-admin.company";
+  } else if (isLocalhost) {
+    // For local development, don't set domain to allow localhost
+    cookieDomain = undefined;
+  }
 
   // `secure` must be disabled during local http development or cookies won't
   // persist and auth will appear to "randomly logout" after refresh.
-  const secure = process.env.NODE_ENV === "production";
+  const secure = isProduction;
 
   const base: Record<string, unknown> = {
     path: "/",
@@ -36,6 +47,9 @@ export function getSupabaseCookieOptions() {
     secure,
   };
 
-  if (cookieDomain) base.domain = cookieDomain;
+  if (cookieDomain && !isLocalhost) {
+    base.domain = cookieDomain;
+  }
+  
   return base as any;
 }
