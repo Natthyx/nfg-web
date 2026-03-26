@@ -75,33 +75,24 @@ export function useUser() {
     const supabase = createClient();
 
     // --- initial load -------------------------------------------------------
-    // getSession() reads from cookies/storage AND triggers a token refresh if
-    // the access-token is expired.  Unlike getUser() it never returns an error
-    // just because the JWT has expired – it refreshes first, then returns.
+    // Simplified approach: trust middleware to handle session validation
+    // Focus on getting user data and profile
     async function init() {
       try {
-        // Prefer getUser() on first paint: it validates the JWT with Supabase Auth.
-        // getSession() reads only from storage; after a hard reload on Vercel, that
-        // can briefly disagree with server/middleware unless cookies are in sync.
+        // Start with session check (middleware already validated)
         const {
-          data: { user: authUser },
-          error,
-        } = await supabase.auth.getUser();
+          data: { session },
+          error: sessionError,
+        } = await supabase.auth.getSession();
 
-        if (error || !authUser) {
-          const {
-            data: { session },
-            error: sessionError,
-          } = await supabase.auth.getSession();
-          if (sessionError || !session) {
-            setUser(null);
-            return;
-          }
-          await loadProfile(supabase, session.user);
+        if (sessionError || !session?.user) {
+          setUser(null);
+          setLoading(false);
           return;
         }
 
-        await loadProfile(supabase, authUser);
+        // Load user profile
+        await loadProfile(supabase, session.user);
       } catch (err) {
         console.error("useUser init error:", err);
         setUser(null);
@@ -116,6 +107,8 @@ export function useUser() {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log('Auth state change:', event, session?.user?.id);
+      
       if (event === "SIGNED_OUT" || !session) {
         setUser(null);
         setLoading(false);

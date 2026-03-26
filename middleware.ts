@@ -62,44 +62,61 @@ export async function middleware(request: NextRequest) {
     return missingEnvResponse();
   }
 
-  let supabaseResponse = NextResponse.next({ request });
+  let response = NextResponse.next({
+    request: {
+      headers: request.headers,
+    },
+  });
 
   const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
     auth: {
       // Avoid parsing/clearing session based on URL fragments on full reloads.
       detectSessionInUrl: false,
+      // Ensure flow is not interrupted on refresh
+      flowType: 'pkce',
     },
     cookies: {
       getAll() {
         return request.cookies.getAll();
       },
       setAll(cookiesToSet) {
-        // `request.cookies.set` in middleware only supports (name, value).
-        // The important part for auth is writing the cookie options to the response.
-        cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
-        supabaseResponse = NextResponse.next({ request });
-        cookiesToSet.forEach(({ name, value, options }) =>
-          supabaseResponse.cookies.set(name, value, options)
-        );
+        cookiesToSet.forEach(({ name, value, options }) => {
+          request.cookies.set(name, value);
+        });
+        response = NextResponse.next({
+          request: {
+            headers: request.headers,
+          },
+        });
+        cookiesToSet.forEach(({ name, value, options }) => {
+          response.cookies.set(name, value, options);
+        });
       },
     },
     cookieOptions: getSupabaseCookieOptions(),
   });
 
-  const user = await getAuthUser(supabase);
+  // Refresh session on every request to ensure client-server sync
+  const {
+    data: { session },
+    error: sessionError,
+  } = await supabase.auth.getSession();
+
+  const user = session?.user;
 
   const path = request.nextUrl.pathname;
   const isLoginPage = path === "/login";
   const isApiRoute = path.startsWith("/api/");
 
-  if (isApiRoute) return supabaseResponse;
+  if (isApiRoute) return response;
 
   function redirectWithCookies(destination: string) {
     const url = request.nextUrl.clone();
     url.pathname = destination;
     const redirectResponse = NextResponse.redirect(url);
 
-    supabaseResponse.cookies.getAll().forEach((cookie) => {
+    // Preserve all cookies from the response
+    response.cookies.getAll().forEach((cookie) => {
       const { name, value, ...opts } = cookie;
       redirectResponse.cookies.set(name, value, opts);
     });
@@ -115,7 +132,7 @@ export async function middleware(request: NextRequest) {
     return redirectWithCookies("/dashboard");
   }
 
-  return supabaseResponse;
+  return response;
 }
 
 export const config = {
