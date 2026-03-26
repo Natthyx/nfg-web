@@ -1,10 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
-import {
-  getSupabaseAnonKey,
-  getSupabaseCookieOptions,
-  getSupabaseUrl,
-} from "@/lib/supabase/env";
+import { getSupabaseAnonKey, getSupabaseUrl } from "@/lib/supabase/env";
 
 export function createClient() {
   const cookieStore = cookies();
@@ -27,6 +23,5 @@ export function createClient() {
         }
       },
     },
-    cookieOptions: getSupabaseCookieOptions(),
   });
 }

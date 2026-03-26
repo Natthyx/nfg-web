@@ -1,9 +1,5 @@
 import { createBrowserClient } from "@supabase/ssr";
-import {
-  getSupabaseAnonKey,
-  getSupabaseCookieOptions,
-  getSupabaseUrl,
-} from "@/lib/supabase/env";
+import { getSupabaseAnonKey, getSupabaseUrl } from "@/lib/supabase/env";
 
 export function createClient() {
   const url = getSupabaseUrl();
@@ -13,17 +9,9 @@ export function createClient() {
     auth: {
       persistSession: true,
       autoRefreshToken: true,
-      // Avoid parsing non-existent OAuth/PKCE fragments on full reload
+      // Avoid parsing non-existent OAuth/PKCE fragments on full reload — can clear
+      // cookie session in production (see Supabase SSR + Next.js refresh issues).
       detectSessionInUrl: false,
-      // Enable debug mode to track session issues
-      debug: process.env.NODE_ENV === "development",
-    },
-    cookieOptions: getSupabaseCookieOptions(),
-    // Add global configuration for better error handling
-    global: {
-      headers: {
-        'X-Client-Info': 'nfg-web/1.0.0',
-      },
     },
   });
 }

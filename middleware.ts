@@ -1,10 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import type { SupabaseClient, User } from "@supabase/supabase-js";
-import {
-  getSupabaseAnonKey,
-  getSupabaseCookieOptions,
-  getSupabaseUrl,
-} from "@/lib/supabase/env";
+import { getSupabaseAnonKey, getSupabaseUrl } from "@/lib/supabase/env";
 import { NextResponse, type NextRequest } from "next/server";
 
 function missingEnvResponse() {
@@ -23,35 +19,23 @@ function missingEnvResponse() {
 }
 
 /**
- * Resolve the signed-in user for routing. Enhanced for custom domain session persistence.
- * First tries getUser() for validated JWT, falls back to getSession() for refresh scenarios.
+ * Resolve the signed-in user for routing. getUser() validates the JWT with Auth.
+ * If it returns no user (e.g. transient Edge/network issues), fall back to getSession()
+ * so a hard refresh does not false-negative to /login when cookies are still valid.
+ * Dashboard layout still calls getUser() on the server for a real check.
  */
 async function getAuthUser(supabase: SupabaseClient): Promise<User | null> {
-  try {
-    // Primary: Get validated user
-    const {
-      data: { user: fromUser },
-    } = await supabase.auth.getUser();
+  const {
+    data: { user: fromUser },
+  } = await supabase.auth.getUser();
 
-    if (fromUser) return fromUser;
+  if (fromUser) return fromUser;
 
-    // Fallback: Check session (handles token refresh)
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
 
-    if (session?.user) return session.user;
-
-    // Final attempt: Force refresh if tokens exist but are stale
-    const {
-      data: { user: refreshedUser },
-    } = await supabase.auth.refreshSession();
-    
-    return refreshedUser || null;
-  } catch (error) {
-    console.warn('Auth check failed:', error);
-    return null;
-  }
+  return session?.user ?? null;
 }
 
 export async function middleware(request: NextRequest) {
@@ -62,66 +46,37 @@ export async function middleware(request: NextRequest) {
     return missingEnvResponse();
   }
 
-  let response = NextResponse.next({
-    request: {
-      headers: request.headers,
-    },
-  });
+  let supabaseResponse = NextResponse.next({ request });
 
   const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
-    auth: {
-      detectSessionInUrl: false,
-    },
     cookies: {
       getAll() {
         return request.cookies.getAll();
       },
       setAll(cookiesToSet) {
-        cookiesToSet.forEach(({ name, value, options }) => {
-          request.cookies.set(name, value);
-        });
-        response = NextResponse.next({
-          request: {
-            headers: request.headers,
-          },
-        });
-        cookiesToSet.forEach(({ name, value, options }) => {
-          response.cookies.set(name, value, options);
-        });
+        cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
+        supabaseResponse = NextResponse.next({ request });
+        cookiesToSet.forEach(({ name, value, options }) =>
+          supabaseResponse.cookies.set(name, value, options)
+        );
       },
     },
-    cookieOptions: getSupabaseCookieOptions(),
   });
 
-  // CRITICAL: Get session and ensure cookies are set
-  const {
-    data: { session },
-    error: sessionError,
-  } = await supabase.auth.getSession();
-
-  // Debug log for session
-  console.log('Middleware session check:', {
-    hasSession: !!session,
-    userId: session?.user?.id,
-    path: request.nextUrl.pathname,
-    error: sessionError?.message
-  });
-
-  const user = session?.user;
+  const user = await getAuthUser(supabase);
 
   const path = request.nextUrl.pathname;
   const isLoginPage = path === "/login";
   const isApiRoute = path.startsWith("/api/");
 
-  if (isApiRoute) return response;
+  if (isApiRoute) return supabaseResponse;
 
   function redirectWithCookies(destination: string) {
     const url = request.nextUrl.clone();
     url.pathname = destination;
     const redirectResponse = NextResponse.redirect(url);
 
-    // CRITICAL: Forward all cookies from response
-    response.cookies.getAll().forEach((cookie) => {
+    supabaseResponse.cookies.getAll().forEach((cookie) => {
       const { name, value, ...opts } = cookie;
       redirectResponse.cookies.set(name, value, opts);
     });
@@ -137,13 +92,11 @@ export async function middleware(request: NextRequest) {
     return redirectWithCookies("/dashboard");
   }
 
-  // CRITICAL: Return response, not NextResponse.next()
-  return response;
+  return supabaseResponse;
 }
 
 export const config = {
   matcher: [
-    // Match all paths except static files and API routes that don't need auth
     "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };
