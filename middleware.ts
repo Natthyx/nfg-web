@@ -23,23 +23,35 @@ function missingEnvResponse() {
 }
 
 /**
- * Resolve the signed-in user for routing. getUser() validates the JWT with Auth.
- * If it returns no user (e.g. transient Edge/network issues), fall back to getSession()
- * so a hard refresh does not false-negative to /login when cookies are still valid.
- * Dashboard layout still calls getUser() on the server for a real check.
+ * Resolve the signed-in user for routing. Enhanced for custom domain session persistence.
+ * First tries getUser() for validated JWT, falls back to getSession() for refresh scenarios.
  */
 async function getAuthUser(supabase: SupabaseClient): Promise<User | null> {
-  const {
-    data: { user: fromUser },
-  } = await supabase.auth.getUser();
+  try {
+    // Primary: Get validated user
+    const {
+      data: { user: fromUser },
+    } = await supabase.auth.getUser();
 
-  if (fromUser) return fromUser;
+    if (fromUser) return fromUser;
 
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
+    // Fallback: Check session (handles token refresh)
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
 
-  return session?.user ?? null;
+    if (session?.user) return session.user;
+
+    // Final attempt: Force refresh if tokens exist but are stale
+    const {
+      data: { user: refreshedUser },
+    } = await supabase.auth.refreshSession();
+    
+    return refreshedUser || null;
+  } catch (error) {
+    console.warn('Auth check failed:', error);
+    return null;
+  }
 }
 
 export async function middleware(request: NextRequest) {

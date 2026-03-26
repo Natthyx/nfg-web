@@ -9,6 +9,10 @@ const inter = Inter({ subsets: ["latin"] });
 export const metadata: Metadata = {
   title: "NFG Logistics — Dashboard",
   description: "Trucking Management System by NFG",
+  icons: {
+    icon: "/company-logo.png",
+    apple: "/company-logo.png",
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
