@@ -17,18 +17,18 @@ export function getSupabaseAnonKey(): string {
 
 /**
  * Shared cookie options for Supabase SSR auth.
- * Simplified approach to avoid cookie domain issues with custom domains.
+ * CRITICAL: Configure for custom domain nfg-admin.company
  */
 export function getSupabaseCookieOptions() {
   const isProduction = process.env.NODE_ENV === "production";
 
-  // For custom domains, don't set explicit domain to avoid browser security issues
-  // Let browser handle cookie domain automatically
+  // CRITICAL: For custom domains, set explicit domain
   const base: Record<string, unknown> = {
     path: "/",
     sameSite: "lax" as const,
     secure: isProduction,
-    // No explicit domain - let browser set it correctly
+    // CRITICAL: Set domain for custom domain
+    domain: isProduction ? "nfg-admin.company" : undefined,
   };
 
   return base as any;

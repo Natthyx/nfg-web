@@ -70,10 +70,7 @@ export async function middleware(request: NextRequest) {
 
   const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
     auth: {
-      // Avoid parsing/clearing session based on URL fragments on full reloads.
       detectSessionInUrl: false,
-      // Ensure flow is not interrupted on refresh
-      flowType: 'pkce',
     },
     cookies: {
       getAll() {
@@ -96,11 +93,19 @@ export async function middleware(request: NextRequest) {
     cookieOptions: getSupabaseCookieOptions(),
   });
 
-  // Refresh session on every request to ensure client-server sync
+  // CRITICAL: Get session and ensure cookies are set
   const {
     data: { session },
     error: sessionError,
   } = await supabase.auth.getSession();
+
+  // Debug log for session
+  console.log('Middleware session check:', {
+    hasSession: !!session,
+    userId: session?.user?.id,
+    path: request.nextUrl.pathname,
+    error: sessionError?.message
+  });
 
   const user = session?.user;
 
@@ -115,7 +120,7 @@ export async function middleware(request: NextRequest) {
     url.pathname = destination;
     const redirectResponse = NextResponse.redirect(url);
 
-    // Preserve all cookies from the response
+    // CRITICAL: Forward all cookies from response
     response.cookies.getAll().forEach((cookie) => {
       const { name, value, ...opts } = cookie;
       redirectResponse.cookies.set(name, value, opts);
@@ -132,6 +137,7 @@ export async function middleware(request: NextRequest) {
     return redirectWithCookies("/dashboard");
   }
 
+  // CRITICAL: Return response, not NextResponse.next()
   return response;
 }
 

@@ -75,8 +75,7 @@ export function useUser() {
     const supabase = createClient();
 
     // --- initial load -------------------------------------------------------
-    // Simplified approach: trust middleware to handle session validation
-    // Focus on getting user data and profile
+    // CRITICAL: Use getSession instead of getUser for better reliability
     async function init() {
       try {
         // Start with session check (middleware already validated)
@@ -84,6 +83,12 @@ export function useUser() {
           data: { session },
           error: sessionError,
         } = await supabase.auth.getSession();
+
+        console.log('useUser init session check:', {
+          hasSession: !!session,
+          userId: session?.user?.id,
+          error: sessionError?.message
+        });
 
         if (sessionError || !session?.user) {
           setUser(null);
@@ -107,8 +112,6 @@ export function useUser() {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log('Auth state change:', event, session?.user?.id);
-      
       if (event === "SIGNED_OUT" || !session) {
         setUser(null);
         setLoading(false);

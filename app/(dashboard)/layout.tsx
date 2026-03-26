@@ -11,14 +11,22 @@ export default async function DashboardLayout({
 }) {
   const supabase = createClient();
 
-  // The middleware already refreshed the session and forwarded fresh cookies.
-  // This guard is an additional server-side check.
+  // CRITICAL: Use getSession instead of getUser for better reliability
   const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser();
+    data: { session },
+    error: sessionError,
+  } = await supabase.auth.getSession();
 
-  if (!user || authError) {
+  const user = session?.user;
+
+  // Debug log for layout
+  console.log('Dashboard layout session check:', {
+    hasSession: !!session,
+    userId: user?.id,
+    error: sessionError?.message
+  });
+
+  if (!user || sessionError) {
     redirect("/login");
   }
 
