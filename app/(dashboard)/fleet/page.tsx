@@ -55,22 +55,22 @@ export default function FleetPage() {
         .select("id, reference_number, status, truck_id, trailer_id")
         .not("status", "in", '("delivered","cancelled")');
 
-      const loadMap = new Map((activeLoads as Load[] || []).map((l) => [l.id, l]));
+      const loadMap = new Map((activeLoads || []).map((l) => [l.id, l]));
 
       setTrucks(
-        (trucksData || []).map((t: Truck) => ({
+        (trucksData || []).map((t) => ({
           ...t,
           assigned_load: t.in_use
-            ? Array.from(loadMap.values()).find((l: Load) => l.truck_id === t.id) || null
+            ? Array.from(loadMap.values()).find((l) => l.truck_id === t.id) || null
             : null,
         }))
       );
 
       setTrailers(
-        (trailersData || []).map((t: Trailer) => ({
+        (trailersData || []).map((t) => ({
           ...t,
           assigned_load: t.in_use
-            ? Array.from(loadMap.values()).find((l: Load) => l.trailer_id === t.id) || null
+            ? Array.from(loadMap.values()).find((l) => l.trailer_id === t.id) || null
             : null,
         }))
       );

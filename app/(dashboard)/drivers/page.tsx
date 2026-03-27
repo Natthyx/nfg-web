@@ -63,11 +63,11 @@ export default function DriversPage() {
       if (loadsErr) console.error("Failed to fetch active loads:", loadsErr);
 
       const driverMap = new Map<string, Load>();
-      (activeLoads || []).forEach((l: any) => {
+      (activeLoads || []).forEach((l) => {
         if (l.driver_id) driverMap.set(l.driver_id, l as Load);
       });
 
-      const enriched = (driverData || []).map((d:any) => ({
+      const enriched = (driverData || []).map((d) => ({
         ...d,
         active_load: driverMap.get(d.id) || null,
       }));
