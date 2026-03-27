@@ -69,7 +69,7 @@ export default function ReceiptsPage() {
         const enriched = (data || []).map((r: any) => {
           const receipt = r as ReceiptWithLoad;
           if (receipt.load?.driver_id) {
-            const driver = driversData?.find((d) => d.id === receipt.load?.driver_id);
+            const driver = driversData?.find((d: Pick<User, "id" | "full_name">) => d.id === receipt.load?.driver_id);
             if (driver) {
               receipt.driver = { full_name: driver.full_name };
             }
