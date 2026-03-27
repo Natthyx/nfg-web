@@ -54,8 +54,27 @@ export async function middleware(request: NextRequest) {
         return request.cookies.getAll();
       },
       setAll(cookiesToSet) {
+        // 1. Mutate the request cookies object directly (Next.js >= 13 standard)
         cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
-        supabaseResponse = NextResponse.next({ request });
+
+        // 2. Explicitly serialize the cookies into the 'cookie' header string
+        // This addresses the ChatGPT point where Next.js sometimes drops the
+        // mutated request.cookies on Vercel unless explicitly overridden in headers.
+        const requestHeaders = new Headers(request.headers);
+        const newCookiesString = request.cookies
+          .getAll()
+          .map((c) => `${c.name}=${c.value}`)
+          .join("; ");
+        requestHeaders.set("cookie", newCookiesString);
+
+        // 3. Create the NextResponse with the explicitly mutated headers
+        supabaseResponse = NextResponse.next({
+          request: {
+            headers: requestHeaders,
+          },
+        });
+
+        // 4. Send the new cookies to the browser
         cookiesToSet.forEach(({ name, value, options }) =>
           supabaseResponse.cookies.set(name, value, options)
         );
@@ -68,8 +87,18 @@ export async function middleware(request: NextRequest) {
   const path = request.nextUrl.pathname;
   const isLoginPage = path === "/login";
   const isApiRoute = path.startsWith("/api/");
+  const isAuthRoute = path.startsWith("/api/auth/");
 
-  if (isApiRoute) return supabaseResponse;
+  // Allow auth callbacks and signout routes to bypass middleware auth checks
+  if (isAuthRoute) return supabaseResponse;
+
+  // Protect all other API routes by requiring a user
+  if (isApiRoute) {
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    return supabaseResponse;
+  }
 
   function redirectWithCookies(destination: string) {
     const url = request.nextUrl.clone();
