@@ -11,25 +11,13 @@ export default async function DashboardLayout({
 }) {
   const supabase = createClient();
 
-  // CRITICAL: Use getSession instead of getUser for better reliability
   const {
-    data: { session },
-    error: sessionError,
-  } = await supabase.auth.getSession();
+    data: { user },
+  } = await supabase.auth.getUser();
 
-  const user = session?.user;
-
-  // Debug log for layout
-  console.log('Dashboard layout session check:', {
-    hasSession: !!session,
-    userId: user?.id,
-    error: sessionError?.message
-  });
-
-  if (!user || sessionError) {
+  if (!user) {
     redirect("/login");
   }
 
-  // Only require a valid session; profile is optional.
   return <DashboardShell>{children}</DashboardShell>;
 }

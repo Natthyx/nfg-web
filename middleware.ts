@@ -1,60 +1,29 @@
 import { createServerClient } from "@supabase/ssr";
-import type { SupabaseClient, User } from "@supabase/supabase-js";
-import { getSupabaseAnonKey, getSupabaseUrl } from "@/lib/supabase/env";
 import { NextResponse, type NextRequest } from "next/server";
 
-function missingEnvResponse() {
-  return new NextResponse(
-    `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"/><title>Configuration required</title></head>
-<body style="font-family:system-ui,sans-serif;max-width:42rem;margin:3rem auto;padding:0 1rem;line-height:1.5">
-<h1 style="font-size:1.25rem">Supabase environment variables are missing</h1>
-<p>Set <code>NEXT_PUBLIC_SUPABASE_URL</code> and a client key (<code>NEXT_PUBLIC_SUPABASE_ANON_KEY</code> or
-<code>NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY</code>) in Vercel → Environment Variables, then redeploy.</p>
-</body></html>`,
-    {
-      status: 503,
-      headers: { "content-type": "text/html; charset=utf-8" },
-    }
-  );
-}
-
-/**
- * Resolve the signed-in user for routing. getUser() validates the JWT with Auth.
- * If it returns no user (e.g. transient Edge/network issues), fall back to getSession()
- * so a hard refresh does not false-negative to /login when cookies are still valid.
- * Dashboard layout still calls getUser() on the server for a real check.
- */
-async function getAuthUser(supabase: SupabaseClient): Promise<User | null> {
-  const {
-    data: { user: fromUser },
-  } = await supabase.auth.getUser();
-
-  if (fromUser) return fromUser;
-
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-
-  return session?.user ?? null;
-}
-
 export async function middleware(request: NextRequest) {
-  const supabaseUrl = getSupabaseUrl();
-  const supabaseAnonKey = getSupabaseAnonKey();
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() ?? "";
+  const supabaseKey =
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim() ||
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY?.trim() ||
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY?.trim() ||
+    "";
 
-  if (!supabaseUrl || !supabaseAnonKey) {
-    return missingEnvResponse();
+  if (!supabaseUrl || !supabaseKey) {
+    return new NextResponse("Supabase env vars missing", { status: 503 });
   }
 
   let supabaseResponse = NextResponse.next({ request });
 
-  const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
+  const supabase = createServerClient(supabaseUrl, supabaseKey, {
     cookies: {
       getAll() {
         return request.cookies.getAll();
       },
       setAll(cookiesToSet) {
-        cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
+        cookiesToSet.forEach(({ name, value }) =>
+          request.cookies.set(name, value)
+        );
         supabaseResponse = NextResponse.next({ request });
         cookiesToSet.forEach(({ name, value, options }) =>
           supabaseResponse.cookies.set(name, value, options)
@@ -63,7 +32,13 @@ export async function middleware(request: NextRequest) {
     },
   });
 
-  const user = await getAuthUser(supabase);
+  // getUser() validates the JWT with the Auth server AND triggers a token
+  // refresh when the access-token has expired.  The library awaits the
+  // onAuthStateChange callback so by the time getUser() returns, any
+  // refreshed cookies have already been written to supabaseResponse.
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
   const path = request.nextUrl.pathname;
   const isLoginPage = path === "/login";
@@ -71,25 +46,24 @@ export async function middleware(request: NextRequest) {
 
   if (isApiRoute) return supabaseResponse;
 
-  function redirectWithCookies(destination: string) {
-    const url = request.nextUrl.clone();
-    url.pathname = destination;
-    const redirectResponse = NextResponse.redirect(url);
-
-    supabaseResponse.cookies.getAll().forEach((cookie) => {
-      const { name, value, ...opts } = cookie;
-      redirectResponse.cookies.set(name, value, opts);
-    });
-
-    return redirectResponse;
-  }
-
   if (!user && !isLoginPage) {
-    return redirectWithCookies("/login");
+    const url = request.nextUrl.clone();
+    url.pathname = "/login";
+    const redirect = NextResponse.redirect(url);
+    supabaseResponse.cookies.getAll().forEach((c) => {
+      redirect.cookies.set(c.name, c.value, c);
+    });
+    return redirect;
   }
 
   if (user && isLoginPage) {
-    return redirectWithCookies("/dashboard");
+    const url = request.nextUrl.clone();
+    url.pathname = "/dashboard";
+    const redirect = NextResponse.redirect(url);
+    supabaseResponse.cookies.getAll().forEach((c) => {
+      redirect.cookies.set(c.name, c.value, c);
+    });
+    return redirect;
   }
 
   return supabaseResponse;

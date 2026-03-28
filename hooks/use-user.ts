@@ -4,11 +4,6 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { User } from "@/types";
 
-/**
- * Build a minimal fallback User from Supabase session metadata so the
- * dashboard never shows "??" even when the `public.users` row is missing
- * or temporarily unreachable.
- */
 function fallbackUser(su: {
   id: string;
   email?: string;
@@ -36,7 +31,6 @@ function fallbackUser(su: {
 export function useUser() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-  // Prevent double-init in React StrictMode
   const initialised = useRef(false);
 
   const loadProfile = useCallback(
@@ -54,11 +48,6 @@ export function useUser() {
         if (data && !error) {
           setUser(data);
         } else {
-          // Profile row missing / RLS blocked → use session metadata
-          console.warn(
-            "Profile fetch failed, using session metadata:",
-            error?.message
-          );
           setUser(fallbackUser(sessionUser));
         }
       } catch {
@@ -74,25 +63,24 @@ export function useUser() {
 
     const supabase = createClient();
 
-    // --- initial load -------------------------------------------------------
-    // Simplified approach: trust middleware to handle session validation
-    // Focus on getting user data and profile
     async function init() {
       try {
-        // Start with session check (middleware already validated)
+        // getUser() validates the JWT with the Supabase Auth server.
+        // Unlike getSession(), it forces a proper token refresh when
+        // the access-token is expired — critical after a full page
+        // refresh where the middleware may have written new cookies
+        // that the browser client hasn't seen yet.
         const {
-          data: { session },
-          error: sessionError,
-        } = await supabase.auth.getSession();
+          data: { user: authUser },
+        } = await supabase.auth.getUser();
 
-        if (sessionError || !session?.user) {
+        if (!authUser) {
           setUser(null);
           setLoading(false);
           return;
         }
 
-        // Load user profile
-        await loadProfile(supabase, session.user);
+        await loadProfile(supabase, authUser);
       } catch (err) {
         console.error("useUser init error:", err);
         setUser(null);
@@ -103,19 +91,15 @@ export function useUser() {
 
     init();
 
-    // --- listen for auth changes (refresh, sign-in, sign-out) ---------------
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log('Auth state change:', event, session?.user?.id);
-      
       if (event === "SIGNED_OUT" || !session) {
         setUser(null);
         setLoading(false);
         return;
       }
 
-      // SIGNED_IN, TOKEN_REFRESHED, USER_UPDATED, etc.
       await loadProfile(supabase, session.user);
       setLoading(false);
     });

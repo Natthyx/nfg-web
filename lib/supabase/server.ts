@@ -18,8 +18,7 @@ export function createClient() {
             cookieStore.set(name, value, options)
           );
         } catch {
-          // setAll can be called from a Server Component (read-only).
-          // This can safely be ignored if middleware refreshes the session.
+          // Server Components are read-only — the middleware handles cookie writes.
         }
       },
     },

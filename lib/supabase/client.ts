@@ -5,13 +5,8 @@ export function createClient() {
   const url = getSupabaseUrl();
   const key = getSupabaseAnonKey();
 
-  return createBrowserClient(url, key, {
-    auth: {
-      persistSession: true,
-      autoRefreshToken: true,
-      // Avoid parsing non-existent OAuth/PKCE fragments on full reload — can clear
-      // cookie session in production (see Supabase SSR + Next.js refresh issues).
-      detectSessionInUrl: false,
-    },
-  });
+  // @supabase/ssr@0.8 forces: flowType "pkce", persistSession true,
+  // detectSessionInUrl isBrowser(), autoRefreshToken isBrowser().
+  // Passing auth overrides here has no effect — the library ignores them.
+  return createBrowserClient(url, key);
 }
