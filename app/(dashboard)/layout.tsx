@@ -1,14 +1,34 @@
-import { AuthProvider } from "@/components/auth-provider";
+import { redirect } from "next/navigation";
+import { createClient } from "@/lib/supabase/server";
 import { DashboardShell } from "@/components/dashboard-shell";
 
-export default function DashboardLayout({
+export const dynamic = "force-dynamic";
+
+export default async function DashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const supabase = createClient();
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser();
+
+  if (!user || userError) {
+    redirect("/login");
+  }
+
+  // Pass server-validated user to client components via DashboardShell.
   return (
-    <AuthProvider>
-      <DashboardShell>{children}</DashboardShell>
-    </AuthProvider>
+    <DashboardShell
+      initialUser={{
+        id: user.id,
+        email: user.email,
+        user_metadata: user.user_metadata,
+      }}
+    >
+      {children}
+    </DashboardShell>
   );
 }

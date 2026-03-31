@@ -1,33 +1,57 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 
-async function handleSignOut(request: Request) {
+export async function POST(request: Request) {
   const supabase = createClient();
   await supabase.auth.signOut();
 
-  const origin = new URL(request.url).origin;
-  const response = NextResponse.redirect(new URL("/login", origin), {
+  const url = new URL(request.url);
+  const response = NextResponse.redirect(new URL("/login", url.origin), {
     status: 302,
   });
 
-  // Nuke every sb-* cookie so the browser is fully clean after sign-out.
-  // This prevents stale tokens from triggering refresh loops on the login page.
+  // PART 5: Clear cookies properly
+  // Delete all Supabase auth cookies
   const cookieHeader = request.headers.get("cookie") || "";
-  cookieHeader
-    .split(";")
-    .map((c) => c.trim().split("=")[0])
-    .filter((name) => name.startsWith("sb-"))
-    .forEach((name) => {
-      response.cookies.set(name, "", { maxAge: 0, path: "/" });
-    });
+  const cookies = cookieHeader.split(";").map((c) => c.trim().split("=")[0]);
+  for (const name of cookies) {
+    if (name.startsWith("sb-")) {
+      response.cookies.set(name, "", { maxAge: 0, path: "/", httpOnly: false });
+    }
+  }
+
+  // Also clear known Supabase cookie patterns
+  const knownCookieNames = [
+    "sb-ohuddpwqnwdvyejwlumo-auth-token",
+    "sb-ohuddpwqnwdvyejwlumo-auth-token.0",
+    "sb-ohuddpwqnwdvyejwlumo-auth-token.1",
+  ];
+
+  for (const name of knownCookieNames) {
+    response.cookies.set(name, "", { maxAge: 0, path: "/", httpOnly: false });
+  }
 
   return response;
 }
 
 export async function GET(request: Request) {
-  return handleSignOut(request);
-}
+  const supabase = createClient();
+  await supabase.auth.signOut();
 
-export async function POST(request: Request) {
-  return handleSignOut(request);
+  const url = new URL(request.url);
+  const response = NextResponse.redirect(new URL("/login", url.origin), {
+    status: 302,
+  });
+
+  // PART 5: Clear cookies properly
+  // Delete all cookies that start with sb-
+  const cookieHeader = request.headers.get("cookie") || "";
+  const cookies = cookieHeader.split(";").map((c) => c.trim().split("=")[0]);
+  for (const name of cookies) {
+    if (name.startsWith("sb-")) {
+      response.cookies.set(name, "", { maxAge: 0, path: "/", httpOnly: false });
+    }
+  }
+
+  return response;
 }

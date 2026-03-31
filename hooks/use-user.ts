@@ -1,14 +1,12 @@
 "use client";
 
-import { useAuth } from "@/components/auth-provider";
+import { useUserContext } from "@/contexts/user-context";
 
 /**
- * Returns the authenticated user and loading state.
- *
- * All auth validation happens client-side via the AuthProvider.
- * The browser Supabase client manages tokens by writing directly
- * to document.cookie — no dependency on server-side Set-Cookie headers.
+ * Convenience hook — returns the authenticated user from the nearest
+ * UserProvider.  All the heavy lifting (profile fetch, auth listener)
+ * lives in `contexts/user-context.tsx`.
  */
 export function useUser() {
-  return useAuth();
+  return useUserContext();
 }
