@@ -54,11 +54,13 @@ export async function middleware(request: NextRequest) {
         return request.cookies.getAll();
       },
       setAll(cookiesToSet) {
-        cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
+        // IMPORTANT: In Next.js middleware, treat `request.cookies` as read-only.
+        // Persist refreshed tokens by setting them on the *response* only.
+        // Mutating request cookies can appear to work locally but fail on Vercel/Edge.
         supabaseResponse = NextResponse.next({ request });
-        cookiesToSet.forEach(({ name, value, options }) =>
-          supabaseResponse.cookies.set(name, value, options)
-        );
+        cookiesToSet.forEach(({ name, value, options }) => {
+          supabaseResponse.cookies.set(name, value, options);
+        });
       },
     },
   });
